@@ -34,6 +34,7 @@ services:
       REDIS_URL: redis://redis:6379
       ADMIN_TOKEN: change-me-admin-token
       CORS_ORIGIN: http://localhost:5180
+      RUN_WORKER_IN_API: 'false'
     command: ['sh', '-c', 'npx prisma migrate deploy && node dist/main.js']
     ports:
       - '3200:3200'

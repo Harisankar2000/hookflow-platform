@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (typecheck, unit, e2e, build)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hookflow
+          POSTGRES_PASSWORD: hookflow
+          POSTGRES_DB: hookflow
+        ports: ['5440:5432']
+        options: >-
+          --health-cmd "pg_isready -U hookflow" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6390:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hookflow:hookflow@localhost:5440/hookflow
+      REDIS_URL: redis://localhost:6390
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+        working-directory: apps/api
+      - run: npx prisma migrate deploy
+        working-directory: apps/api
+      - run: npm run lint -w @hookflow/api
+      - run: npm test -w @hookflow/api
+      - run: npm run test:e2e -w @hookflow/api
+      - run: npm run build -w @hookflow/api
+
+  dashboard:
+    name: Dashboard (typecheck, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @hookflow/dashboard
+
+  receiver:
+    name: Receiver (signature tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test -w @hookflow/receiver
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose --profile app build
