@@ -1,0 +1,71 @@
+name: hookflow-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hookflow
+      POSTGRES_PASSWORD: hookflow
+      POSTGRES_DB: hookflow
+    ports:
+      - '5440:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hookflow']
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6390:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      retries: 10
+
+  # Full stack: docker compose --profile app up --build
+  api:
+    profiles: ['app']
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    environment: &api-env
+      DATABASE_URL: postgresql://hookflow:hookflow@postgres:5432/hookflow
+      REDIS_URL: redis://redis:6379
+      ADMIN_TOKEN: change-me-admin-token
+      CORS_ORIGIN: http://localhost:5180
+    command: ['sh', '-c', 'npx prisma migrate deploy && node dist/main.js']
+    ports:
+      - '3200:3200'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    profiles: ['app']
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    environment: *api-env
+    command: ['node', 'dist/worker.js']
+    depends_on:
+      api: { condition: service_started }
+
+  receiver:
+    profiles: ['app']
+    build: { context: ., dockerfile: apps/receiver/Dockerfile }
+    environment:
+      FAIL_RATE: '0.3'
+    ports:
+      - '4200:4200'
+
+  dashboard:
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3200
+    ports:
+      - '5180:80'
+
+volumes:
+  pgdata:

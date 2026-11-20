@@ -1,0 +1,11 @@
+{
+  "name": "@hookflow/receiver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo webhook receiver: verifies HookFlow signatures and fails on purpose so you can watch retries.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

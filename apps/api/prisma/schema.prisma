@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A tenant. Everything below is scoped to one organization.
+model Organization {
+  id           String        @id @default(cuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  apiKeys      ApiKey[]
+  applications Application[]
+  eventTypes   EventType[]
+}
+
+/// Secret API keys. Only a SHA-256 hash is stored; the prefix is shown in the UI.
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  prefix         String
+  hash           String       @unique
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
+/// A customer-facing system that sends events, e.g. "Payments" or "Orders".
+model Application {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  uid            String
+  createdAt      DateTime     @default(now())
+  endpoints      Endpoint[]
+  messages       Message[]
+
+  @@unique([organizationId, uid])
+  @@index([organizationId])
+}
+
+/// A catalogue of event names, e.g. "payment.succeeded", with an optional JSON example.
+model EventType {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  schemaExample  Json?
+  archived       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, name])
+}
+
+/// A receiving URL. An empty filterTypes list means "subscribe to everything".
+model Endpoint {
+  id                  String      @id @default(cuid())
+  applicationId       String
+  application         Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  url                 String
+  description         String?
+  secret              String
+  filterTypes         String[]
+  disabled            Boolean     @default(false)
+  consecutiveFailures Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  deliveries          Delivery[]
+
+  @@index([applicationId])
+}
+
+/// One event published by an application. Fanned out to one Delivery per matching endpoint.
+model Message {
+  id             String      @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventType      String
+  payload        Json
+  idempotencyKey String?
+  createdAt      DateTime    @default(now())
+  deliveries     Delivery[]
+
+  @@unique([applicationId, idempotencyKey])
+  @@index([applicationId, createdAt])
+}
+
+enum DeliveryStatus {
+  PENDING
+  SUCCEEDED
+  RETRYING
+  FAILED
+}
+
+/// The state of one message going to one endpoint.
+model Delivery {
+  id             String            @id @default(cuid())
+  messageId      String
+  message        Message           @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  endpointId     String
+  endpoint       Endpoint          @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  status         DeliveryStatus    @default(PENDING)
+  attemptCount   Int               @default(0)
+  nextAttemptAt  DateTime?
+  lastStatusCode Int?
+  lastError      String?
+  latencyMs      Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  attempts       DeliveryAttempt[]
+
+  @@unique([messageId, endpointId])
+  @@index([endpointId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
+}
+
+/// Every HTTP attempt, kept for the delivery log.
+model DeliveryAttempt {
+  id           String   @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  attempt      Int
+  statusCode   Int?
+  durationMs   Int
+  responseBody String?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([deliveryId, attempt])
+  @@index([deliveryId])
+}
