@@ -90,10 +90,10 @@ export function Dashboard() {
               <YAxis stroke="#8d8d99" fontSize={12} allowDecimals={false} />
               <Tooltip contentStyle={{ background: '#17171b', border: '1px solid #26262c', borderRadius: 8 }} />
               {series !== 'failed' && (
-                <Area type="monotone" dataKey="succeeded" name="Succeeded" stroke="#22c55e" fill="url(#ok)" strokeWidth={2} />
+                <Area type="monotone" dataKey="succeeded" name="Succeeded" stroke="#22c55e" fill="url(#ok)" strokeWidth={2} isAnimationActive={false} />
               )}
               {series !== 'succeeded' && (
-                <Area type="monotone" dataKey="failed" name="Failed" stroke="#ef4444" fill="url(#bad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="failed" name="Failed" stroke="#ef4444" fill="url(#bad)" strokeWidth={2} isAnimationActive={false} />
               )}
             </AreaChart>
           </ResponsiveContainer>
